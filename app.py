@@ -4,58 +4,81 @@ import pandas as pd
 from datetime import datetime
 import google.generativeai as genai
 
+# Configure Gemini API
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-
-st.write("API loaded:", "GEMINI_API_KEY" in st.secrets)
 
 st.title("AI Macro Tracker")
 
+# Initialize session state
 if "logs" not in st.session_state:
     st.session_state.logs = []
 
+# Input field
 food_input = st.text_input("Enter what you ate")
 
+# Add meal button
 if st.button("Add Meal"):
 
-    prompt = f"""
-    Estimate calories, protein, carbs, and fat for this meal:
+    if food_input.strip() == "":
+        st.warning("Please enter some food.")
+    else:
 
-    {food_input}
+        prompt = f"""
+Estimate calories, protein, carbs, and fat for this meal.
 
-    Return JSON like:
-    {{"calories":0,"protein":0,"carbs":0,"fat":0}}
-    """
+Meal: {food_input}
 
-    model = genai.GenerativeModel("gemini-1.5-flash")
-    response = model.generate_content(prompt)
+Return ONLY JSON in this format:
 
-    try:
-        
-        data = json.loads(response.candidates[0].content.parts[0].text)
+{{
+"calories": number,
+"protein": number,
+"carbs": number,
+"fat": number
+}}
+"""
 
-        st.session_state.logs.append({
-            "time": datetime.now(),
-            "food": food_input,
-            "calories": data["calories"],
-            "protein": data["protein"],
-            "carbs": data["carbs"],
-            "fat": data["fat"]
-        })
+        try:
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            response = model.generate_content(prompt)
 
-    except:
-        st.error("Could not parse response")
+            # Clean Gemini response
+            text = response.text.strip()
 
+            if text.startswith("```"):
+                text = text.replace("```json", "").replace("```", "").strip()
+
+            data = json.loads(text)
+
+            st.session_state.logs.append({
+                "time": datetime.now(),
+                "food": food_input,
+                "calories": data["calories"],
+                "protein": data["protein"],
+                "carbs": data["carbs"],
+                "fat": data["fat"]
+            })
+
+            st.success("Meal added!")
+
+        except Exception as e:
+            st.error("Could not parse Gemini response.")
+            st.write(e)
+
+# Display logs
 if st.session_state.logs:
 
     df = pd.DataFrame(st.session_state.logs)
 
-    st.subheader("Today's totals")
+    st.subheader("Today's Totals")
 
-    st.write("Calories:", df["calories"].sum())
-    st.write("Protein:", df["protein"].sum())
-    st.write("Carbs:", df["carbs"].sum())
-    st.write("Fat:", df["fat"].sum())
+    col1, col2, col3, col4 = st.columns(4)
+
+    col1.metric("Calories", int(df["calories"].sum()))
+    col2.metric("Protein (g)", int(df["protein"].sum()))
+    col3.metric("Carbs (g)", int(df["carbs"].sum()))
+    col4.metric("Fat (g)", int(df["fat"].sum()))
 
     st.subheader("Meal Log")
 
-    st.dataframe(df)
+    st.dataframe(df, use_container_width=True)
