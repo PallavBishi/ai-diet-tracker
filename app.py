@@ -3,6 +3,8 @@ import json
 import pandas as pd
 from datetime import datetime
 import google.generativeai as genai
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
 # Configure Gemini API
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
@@ -11,6 +13,18 @@ st.set_page_config(page_title="AI Macro Tracker", layout="centered")
 
 st.title("🥗 AI Macro Tracker")
 st.caption("Consistent discomfort is equal to consistent growth.")
+
+scope = [
+"https://spreadsheets.google.com/feeds",
+"https://www.googleapis.com/auth/drive"
+]
+
+creds = ServiceAccountCredentials.from_json_keyfile_dict(
+st.secrets["GCP_SERVICE_ACCOUNT"], scope
+)
+
+client = gspread.authorize(creds)
+sheet = client.open("AI_Diet_Database").sheet1
 
 # Initialize session state for logs
 if "logs" not in st.session_state:
@@ -62,6 +76,15 @@ if submit_button:
                     "Fat (g)": data["fat"]
                 })
                 st.success(f"Log updated: {food_input}")
+            sheet.append_row([
+            datetime.now().strftime("%Y-%m-%d"),
+            datetime.now().strftime("%H:%M"),
+            food_input,
+            data["calories"],
+            data["protein"],
+            data["carbs"],
+            data["fat"]
+            ])
         except Exception as e:
             st.error("Model Error: Gemini 1.5 is retired. Please ensure you are using gemini-2.5-flash.")
             st.info("If error persists, try 'gemini-3-flash-preview' for the latest experimental features.")
