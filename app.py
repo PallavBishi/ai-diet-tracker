@@ -16,29 +16,25 @@ st.caption("Consistent discomfort is equal to consistent growth.")
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
 # Fix GCP Private Key formatting for oauth2client
-# --- DEBUGGING CONNECTION BLOCK ---
+scope = [
+    "https://spreadsheets.google.com/feeds",
+    "https://www.googleapis.com/auth/drive"
+]
+
+# 2. Get and clean the secrets
+gcp_info = dict(st.secrets["GCP_SERVICE_ACCOUNT"])
+if "private_key" in gcp_info:
+    gcp_info["private_key"] = gcp_info["private_key"].replace("\\n", "\n")
+
+# 3. Now use scope to authenticate
 try:
-    # 1. Load and Clean
-    gcp_info = dict(st.secrets["GCP_SERVICE_ACCOUNT"])
-    if "private_key" in gcp_info:
-        # This handles both real newlines and escaped string newlines
-        gcp_info["private_key"] = gcp_info["private_key"].replace("\\n", "\n")
-    
-    # 2. Authenticate
     creds = ServiceAccountCredentials.from_json_keyfile_dict(gcp_info, scope)
     client = gspread.authorize(creds)
-    
-    # 3. List all sheets the bot can actually see (to verify sharing)
-    visible_sheets = [s.title for s in client.openall()]
-    st.write(f"✅ Bot connected! Sheets found: {visible_sheets}")
-    
-    # 4. Open the specific sheet
     sheet = client.open("AI_DIET_DATABASE").sheet1
-
+    st.success("✅ Connection Successful!")
 except Exception as e:
     st.error("🚨 CONNECTION FAILED")
-    st.exception(e)  # This will show the full Traceback error
-    st.stop()
+    st.exception(e)
 
 @st.cache_resource
 def init_gsheet():
