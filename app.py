@@ -3,6 +3,8 @@ import pandas as pd
 from datetime import datetime
 import google.generativeai as genai
 
+genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+
 st.title("AI Macro Tracker")
 
 if "logs" not in st.session_state:
