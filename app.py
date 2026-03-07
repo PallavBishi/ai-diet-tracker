@@ -76,8 +76,12 @@ if submit and food_input:
             sheet.append_row(row)
             
             st.session_state.logs.append({
-                "Time": now.strftime("%H:%M"), "Food": food_input, 
-                "Calories": data["calories"], "Protein": data["protein"]
+                "Time": now.strftime("%H:%M"),
+                "Food": food_input,
+                "Calories": data["calories"],
+                "Protein": data["protein"],
+                "Carbs": data["carbs"],
+                "Fat": data["fat"]
             })
             st.success("Meal logged!")
     except Exception as e:
@@ -87,7 +91,9 @@ if submit and food_input:
 if st.session_state.logs:
     df = pd.DataFrame(st.session_state.logs)
     st.divider()
-    cols = st.columns(2)
+    cols = st.columns(4)
+
     cols[0].metric("Calories Today", int(df["Calories"].sum()))
-    cols[1].metric("Protein Today", f"{int(df['Protein'].sum())}g")
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    cols[1].metric("Protein Today", f"{int(df['Protein'].sum())} g")
+    cols[2].metric("Carbs Today", f"{int(df['Carbs'].sum())} g")
+    cols[3].metric("Fat Today", f"{int(df['Fat'].sum())} g")
