@@ -5,6 +5,8 @@ import google.generativeai as genai
 
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
+st.write("API loaded:", "GEMINI_API_KEY" in st.secrets)
+
 st.title("AI Macro Tracker")
 
 if "logs" not in st.session_state:
