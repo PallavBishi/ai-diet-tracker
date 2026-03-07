@@ -5,80 +5,87 @@ from datetime import datetime
 import google.generativeai as genai
 
 # Configure Gemini API
+# Ensure GEMINI_API_KEY is set in your .streamlit/secrets.toml
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
-st.title("AI Macro Tracker")
+st.set_page_config(page_title="AI Macro Tracker", layout="centered")
 
-# Initialize session state
+st.title("🥗 AI Macro Tracker")
+st.caption("Consistent discomfort is equal to consistent growth. Track every bite.")
+
+# Initialize session state for logs
 if "logs" not in st.session_state:
     st.session_state.logs = []
 
-# Input field
-food_input = st.text_input("Enter what you ate")
+# Configure the model with a JSON schema for 100% reliable parsing
+generation_config = {
+    "response_mime_type": "application/json",
+    "response_schema": {
+        "type": "object",
+        "properties": {
+            "calories": {"type": "number"},
+            "protein": {"type": "number"},
+            "carbs": {"type": "number"},
+            "fat": {"type": "number"},
+        },
+        "required": ["calories", "protein", "carbs", "fat"],
+    },
+}
 
-# Add meal button
-if st.button("Add Meal"):
+model = genai.GenerativeModel(
+    model_name="gemini-1.5-flash",
+    generation_config=generation_config
+)
 
-    if food_input.strip() == "":
+# --- UI INPUT ---
+with st.form("meal_form", clear_on_submit=True):
+    food_input = st.text_input("What did you eat?", placeholder="e.g. 2 scrambled eggs and a piece of whole wheat toast")
+    submit_button = st.form_submit_button("Add Meal")
+
+if submit_button:
+    if not food_input.strip():
         st.warning("Please enter some food.")
     else:
-
-        prompt = f"""
-Estimate calories, protein, carbs, and fat for this meal.
-
-Meal: {food_input}
-
-Return ONLY JSON in this format:
-
-{{
-"calories": number,
-"protein": number,
-"carbs": number,
-"fat": number
-}}
-"""
-
         try:
-            model = genai.GenerativeModel("models/gemini-1.5-flash-latest")
-            response = model.generate_content(prompt)
+            with st.spinner("Analyzing macros..."):
+                prompt = f"Estimate the nutritional content for this meal: {food_input}. Provide estimates for calories, protein (g), carbs (g), and fat (g)."
+                response = model.generate_content(prompt)
+                
+                # Because we used response_schema, response.text is guaranteed to be valid JSON
+                data = json.loads(response.text)
 
-            # Clean Gemini response
-            text = response.text.strip()
-
-            if text.startswith("```"):
-                text = text.replace("```json", "").replace("```", "").strip()
-
-            data = json.loads(text)
-
-            st.session_state.logs.append({
-                "time": datetime.now(),
-                "food": food_input,
-                "calories": data["calories"],
-                "protein": data["protein"],
-                "carbs": data["carbs"],
-                "fat": data["fat"]
-            })
-
-            st.success("Meal added!")
+                # Log the entry
+                st.session_state.logs.append({
+                    "Time": datetime.now().strftime("%H:%M"),
+                    "Food": food_input,
+                    "Calories": data["calories"],
+                    "Protein (g)": data["protein"],
+                    "Carbs (g)": data["carbs"],
+                    "Fat (g)": data["fat"]
+                })
+                st.success(f"Added: {food_input}")
 
         except Exception as e:
-            st.error("Could not parse Gemini response.")
-            st.write(e)
+            st.error("Gemini API Error. Check your API key or connection.")
+            st.exception(e)
 
-# Display logs
+# --- DISPLAY DATA ---
 if st.session_state.logs:
-
     df = pd.DataFrame(st.session_state.logs)
 
+    st.divider()
+    
+    # Totals Section
     st.subheader("Today's Totals")
-
-    col1, col2, col3, col4 = st.columns(4)
-
-    col1.metric("Calories", int(df["calories"].sum()))
-    col2.metric("Protein (g)", int(df["protein"].sum()))
-    col3.metric("Carbs (g)", int(df["carbs"].sum()))
-    col4.metric("Fat (g)", int(df["fat"].sum()))
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Calories", f"{int(df['Calories'].sum())}")
+    c2.metric("Protein", f"{int(df['Protein (g)'].sum())}g")
+    c3.metric("Carbs", f"{int(df['Carbs (g)'].sum())}g")
+    c4.metric("Fat", f"{int(df['Fat (g)'].sum())}g")
 
     st.subheader("Meal Log")
+    st.dataframe(df, use_container_width=True, hide_index=True)
 
-    st.dataframe(df, use_container_width=True)
+    if st.button("Clear Log"):
+        st.session_state.logs = []
+        st.rerun()
