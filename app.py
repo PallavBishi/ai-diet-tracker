@@ -3,6 +3,8 @@ import json
 import pandas as pd
 from datetime import datetime
 import google.generativeai as genai
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
 # Configure Gemini API
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
@@ -30,6 +32,18 @@ generation_config = {
         "required": ["calories", "protein", "carbs", "fat"],
     },
 }
+
+scope = [
+    "https://spreadsheets.google.com/feeds",
+    "https://www.googleapis.com/auth/drive"
+]
+
+creds = ServiceAccountCredentials.from_json_keyfile_dict(
+    st.secrets["GCP_SERVICE_ACCOUNT"], scope
+)
+
+client = gspread.authorize(creds)
+sheet = client.open("AI_DIET_DATABASE").sheet1
 
 model = genai.GenerativeModel(
     model_name="gemini-2.5-flash",
@@ -62,6 +76,16 @@ Estimate calories, protein, carbs, and fat for this meal:
                 response = model.generate_content(prompt)
 
                 data = json.loads(response.text)
+
+                sheet.append_row([
+                    datetime.now().strftime("%Y-%m-%d"),
+                    datetime.now().strftime("%H:%M"),
+                    food_input,
+                    data["calories"],
+                    data["protein"],
+                    data["carbs"],
+                    data["fat"]
+                ])
 
                 st.session_state.logs.append({
                     "Time": datetime.now().strftime("%H:%M"),
