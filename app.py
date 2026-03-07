@@ -13,35 +13,63 @@ st.caption("Consistent discomfort is equal to consistent growth.")
 
 # --- 2. AUTHENTICATION & CONFIGURATION ---
 
-# Define Google API Scopes
+# Define Scopes
 scope = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive"
 ]
 
-# Configure Gemini API from Streamlit Secrets
+# Configure Gemini API
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
-# Prepare and Clean GCP Credentials
-# This dictionary conversion and string replace fixes the 'binascii' error
-gcp_info = dict(st.secrets["GCP_SERVICE_ACCOUNT"])
-if "private_key" in gcp_info:
-    gcp_info["private_key"] = gcp_info["private_key"].replace("\\n", "\n")
-
-# Function to initialize Google Sheets connection with caching
 @st.cache_resource
 def init_gsheet():
     try:
+        # Load the secret dictionary
+        gcp_info = dict(st.secrets["GCP_SERVICE_ACCOUNT"])
+        
+        # Clean the private key
+        if "private_key" in gcp_info:
+            pk = gcp_info["private_key"]
+            
+            # 1. Fix literal newlines if they exist
+            pk = pk.replace("\\n", "\n")
+            
+            # 2. Ensure it starts and ends correctly
+            pk = pk.strip()
+            
+            # 3. FIX: Handling 'Incorrect Padding'
+            # We isolate the base64 part and check its length
+            header = "-----BEGIN PRIVATE KEY-----"
+            footer = "-----END PRIVATE KEY-----"
+            
+            if header in pk and footer in pk:
+                # Extract the actual key content between the headers
+                inner_key = pk.split(header)[1].split(footer)[0].replace("\n", "").replace(" ", "")
+                
+                # Base64 strings must be a multiple of 4. If not, add '=' padding.
+                missing_padding = len(inner_key) % 4
+                if missing_padding:
+                    inner_key += "=" * (4 - missing_padding)
+                
+                # Reconstruct the cleaned key
+                pk = f"{header}\n{inner_key}\n{footer}"
+            
+            gcp_info["private_key"] = pk
+
+        # Authorize
         creds = ServiceAccountCredentials.from_json_keyfile_dict(gcp_info, scope)
         client = gspread.authorize(creds)
-        # Using the specific Sheet ID provided in your reference
+        
+        # Using the specific Sheet ID provided
         return client.open_by_key("1g6U3DHqqiCKbyo5DR0w4SCTYFqucAQst8bJRpqMpcc4").sheet1
+        
     except Exception as e:
-        st.error("🚨 Failed to connect to Google Sheets.")
+        st.error("🚨 Connection Error: Check your Secret formatting or Sheet permissions.")
         st.exception(e)
         st.stop()
 
-# Initialize the sheet
+# Initialize connection
 sheet = init_gsheet()
 
 # --- 3. AI MODEL SETUP ---
@@ -65,7 +93,6 @@ model = genai.GenerativeModel(
 )
 
 # --- 4. SESSION STATE ---
-# This keeps track of the meals added during the current browser session
 if "logs" not in st.session_state:
     st.session_state.logs = []
 
@@ -80,16 +107,14 @@ with st.form("meal_form", clear_on_submit=True):
 # --- 6. LOGIC: WHEN USER SUBMITS ---
 if submit_button:
     if not food_input.strip():
-        st.warning("Please enter some food details.")
+        st.warning("Please enter some food.")
     else:
         try:
             with st.spinner("Analyzing nutrition..."):
-                # Call Gemini API
                 prompt = f"Estimate calories, protein, carbs, and fat for this meal: {food_input}"
                 response = model.generate_content(prompt)
                 data = json.loads(response.text)
 
-                # Prepare data row for Google Sheets
                 now = datetime.now()
                 row = [
                     now.strftime("%Y-%m-%d"),
@@ -101,10 +126,8 @@ if submit_button:
                     data["fat"]
                 ]
                 
-                # Append to Google Sheet database
                 sheet.append_row(row)
 
-                # Update local session state for immediate display
                 st.session_state.logs.append({
                     "Time": now.strftime("%H:%M"),
                     "Food": food_input,
@@ -113,10 +136,10 @@ if submit_button:
                     "Carbs (g)": data["carbs"],
                     "Fat (g)": data["fat"]
                 })
-                st.success(f"Successfully logged: {food_input}!")
+                st.success(f"Added: {food_input}!")
 
         except Exception as e:
-            st.error(f"An error occurred: {e}")
+            st.error(f"Error processing meal: {e}")
 
 # --- 7. DASHBOARD DISPLAY ---
 if st.session_state.logs:
@@ -125,18 +148,15 @@ if st.session_state.logs:
     st.divider()
     st.subheader("Today's Progress")
     
-    # Display Metrics
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Calories", f"{int(df['Calories'].sum())}")
     c2.metric("Protein", f"{int(df['Protein (g)'].sum())}g")
     c3.metric("Carbs", f"{int(df['Carbs (g)'].sum())}g")
     c4.metric("Fat", f"{int(df['Fat (g)'].sum())}g")
 
-    # Display Meal History Table
     st.subheader("Meal Log")
     st.dataframe(df, use_container_width=True, hide_index=True)
 
-    # Reset Option
     if st.button("Clear Log View"):
         st.session_state.logs = []
         st.rerun()
