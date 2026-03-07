@@ -2,6 +2,7 @@ import streamlit as st
 import json
 import pandas as pd
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import google.generativeai as genai
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -29,10 +30,10 @@ genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
 @st.cache_resource
 def init_gsheet():
+
     try:
         gcp_info = dict(st.secrets["GCP_SERVICE_ACCOUNT"])
 
-        # Fix private key formatting
         if "private_key" in gcp_info:
             gcp_info["private_key"] = gcp_info["private_key"].replace("\\n", "\n")
 
@@ -47,7 +48,8 @@ def init_gsheet():
         return sheet
 
     except Exception as e:
-        st.error("🚨 Google Sheets Authentication Failed")
+
+        st.error("🚨 Authentication Failed")
         st.exception(e)
         st.stop()
 
@@ -60,14 +62,17 @@ sheet = init_gsheet()
 
 @st.cache_data(ttl=60)
 def load_logs():
+
     data = sheet.get_all_records()
 
     if not data:
         return pd.DataFrame(
-            columns=["Date", "Time", "Food", "Calories", "Protein", "Carbs", "Fat"]
+            columns=["Date","Time","Food","Calories","Protein","Carbs","Fat"]
         )
 
-    return pd.DataFrame(data)
+    df = pd.DataFrame(data)
+
+    return df
 
 
 df = load_logs()
@@ -88,9 +93,9 @@ model = genai.GenerativeModel(
                 "carbs": {"type": "number"},
                 "fat": {"type": "number"},
             },
-            "required": ["calories", "protein", "carbs", "fat"],
-        },
-    },
+            "required": ["calories","protein","carbs","fat"],
+        }
+    }
 )
 
 # --------------------------------------------------
@@ -101,20 +106,20 @@ with st.form("meal_form", clear_on_submit=True):
 
     food_input = st.text_input(
         "What did you eat?",
-        placeholder="Example: 2 boiled eggs and 1 slice bread"
+        placeholder="Example: 2 boiled eggs"
     )
 
     submit = st.form_submit_button("Add Meal")
 
 # --------------------------------------------------
-# 6. PROCESS MEAL ENTRY
+# 6. PROCESS ENTRY
 # --------------------------------------------------
 
 if submit and food_input:
 
     try:
 
-        with st.spinner("Calculating macros with AI..."):
+        with st.spinner("Calculating macros..."):
 
             response = model.generate_content(
                 f"Estimate calories, protein, carbs, fat: {food_input}"
@@ -122,7 +127,8 @@ if submit and food_input:
 
             data = json.loads(response.text)
 
-            now = datetime.now()
+            # Correct IST time
+            now = datetime.now(ZoneInfo("Asia/Kolkata"))
 
             row = [
                 now.strftime("%Y-%m-%d"),
@@ -131,36 +137,37 @@ if submit and food_input:
                 data["calories"],
                 data["protein"],
                 data["carbs"],
-                data["fat"],
+                data["fat"]
             ]
 
             sheet.append_row(row)
 
-            # Clear cache so new data appears immediately
+            # refresh cache
             load_logs.clear()
 
-            st.success("Meal logged successfully!")
+            st.success("Meal logged!")
 
             st.rerun()
 
     except Exception as e:
+
         st.error(f"Error: {e}")
 
 # --------------------------------------------------
-# 7. DISPLAY DASHBOARD
+# 7. DASHBOARD DISPLAY
 # --------------------------------------------------
 
 if not df.empty:
 
     st.divider()
 
-    # Convert columns to numeric
-    df["Calories"] = pd.to_numeric(df["Calories"])
-    df["Protein"] = pd.to_numeric(df["Protein"])
-    df["Carbs"] = pd.to_numeric(df["Carbs"])
-    df["Fat"] = pd.to_numeric(df["Fat"])
+    # convert macros safely
+    for col in ["Calories","Protein","Carbs","Fat"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+        else:
+            df[col] = 0
 
-    # Daily totals
     calories_total = df["Calories"].sum()
     protein_total = df["Protein"].sum()
     carbs_total = df["Carbs"].sum()
@@ -184,4 +191,5 @@ if not df.empty:
     )
 
 else:
+
     st.info("No meals logged yet.")
