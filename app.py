@@ -5,19 +5,19 @@ from datetime import datetime
 import google.generativeai as genai
 
 # Configure Gemini API
-# Ensure GEMINI_API_KEY is set in your .streamlit/secrets.toml
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
 st.set_page_config(page_title="AI Macro Tracker", layout="centered")
 
 st.title("🥗 AI Macro Tracker")
-st.caption("Consistent discomfort is equal to consistent growth. Track every bite.")
+st.caption("Consistent discomfort is equal to consistent growth.")
 
 # Initialize session state for logs
 if "logs" not in st.session_state:
     st.session_state.logs = []
 
-# Configure the model with a JSON schema for 100% reliable parsing
+# --- UPDATED MODEL CONFIGURATION (2026 STABLE) ---
+# Using gemini-2.5-flash which replaces the retired 1.5 series
 generation_config = {
     "response_mime_type": "application/json",
     "response_schema": {
@@ -33,13 +33,13 @@ generation_config = {
 }
 
 model = genai.GenerativeModel(
-    model_name="gemini-1.5-flash",
+    model_name="gemini-2.5-flash", 
     generation_config=generation_config
 )
 
 # --- UI INPUT ---
 with st.form("meal_form", clear_on_submit=True):
-    food_input = st.text_input("What did you eat?", placeholder="e.g. 2 scrambled eggs and a piece of whole wheat toast")
+    food_input = st.text_input("What did you eat?", placeholder="e.g. 1 avocado and 2 boiled eggs")
     submit_button = st.form_submit_button("Add Meal")
 
 if submit_button:
@@ -47,14 +47,12 @@ if submit_button:
         st.warning("Please enter some food.")
     else:
         try:
-            with st.spinner("Analyzing macros..."):
-                prompt = f"Estimate the nutritional content for this meal: {food_input}. Provide estimates for calories, protein (g), carbs (g), and fat (g)."
+            with st.spinner("Calculating macros..."):
+                prompt = f"Estimate macros for: {food_input}"
                 response = model.generate_content(prompt)
                 
-                # Because we used response_schema, response.text is guaranteed to be valid JSON
                 data = json.loads(response.text)
 
-                # Log the entry
                 st.session_state.logs.append({
                     "Time": datetime.now().strftime("%H:%M"),
                     "Food": food_input,
@@ -63,20 +61,17 @@ if submit_button:
                     "Carbs (g)": data["carbs"],
                     "Fat (g)": data["fat"]
                 })
-                st.success(f"Added: {food_input}")
-
+                st.success(f"Log updated: {food_input}")
         except Exception as e:
-            st.error("Gemini API Error. Check your API key or connection.")
-            st.exception(e)
+            st.error("Model Error: Gemini 1.5 is retired. Please ensure you are using gemini-2.5-flash.")
+            st.info("If error persists, try 'gemini-3-flash-preview' for the latest experimental features.")
 
 # --- DISPLAY DATA ---
 if st.session_state.logs:
     df = pd.DataFrame(st.session_state.logs)
-
     st.divider()
     
-    # Totals Section
-    st.subheader("Today's Totals")
+    st.subheader("Daily Progress")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Calories", f"{int(df['Calories'].sum())}")
     c2.metric("Protein", f"{int(df['Protein (g)'].sum())}g")
@@ -86,6 +81,6 @@ if st.session_state.logs:
     st.subheader("Meal Log")
     st.dataframe(df, use_container_width=True, hide_index=True)
 
-    if st.button("Clear Log"):
+    if st.button("Clear Data"):
         st.session_state.logs = []
         st.rerun()
