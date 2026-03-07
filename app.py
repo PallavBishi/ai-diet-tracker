@@ -39,8 +39,10 @@ scope = [
 ]
 
 creds = ServiceAccountCredentials.from_json_keyfile_dict(
-    st.secrets["GCP_SERVICE_ACCOUNT"], scope
+    dict(st.secrets["GCP_SERVICE_ACCOUNT"]),
+    scope
 )
+
 
 client = gspread.authorize(creds)
 sheet = client.open("AI_DIET_DATABASE").sheet1
