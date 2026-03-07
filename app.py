@@ -25,8 +25,10 @@ if st.button("Add Meal"):
     {{"calories":0,"protein":0,"carbs":0,"fat":0}}
     """
 
-    model = genai.GenerativeModel("gemini-2.0-flash")
-    response = model.generate_content(prompt)
+    response = genai.generate_content(
+    model="gemini-1.5-flash",
+    contents=prompt
+)
 
     try:
         data = eval(response.text)
