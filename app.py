@@ -29,7 +29,7 @@ def init_gsheet():
     creds = ServiceAccountCredentials.from_json_keyfile_dict(gcp_info, scope)
     client = gspread.authorize(creds)
     # Ensure this name matches your Google Sheet exactly
-    return client.open("AI_DIET_DATABASE").sheet1
+    return client.open_by_key("1g6U3DHqqiCKbyo5DR0w4SCTYFqucAQst8bJRpqMpcc4")
 
 try:
     sheet = init_gsheet()
