@@ -1,4 +1,5 @@
 import streamlit as st
+import json
 import pandas as pd
 from datetime import datetime
 import google.generativeai as genai
@@ -31,7 +32,8 @@ if st.button("Add Meal"):
 )
 
     try:
-        data = eval(response.text)
+        
+        data = json.loads(response.candidates[0].content.parts[0].text)
 
         st.session_state.logs.append({
             "time": datetime.now(),
