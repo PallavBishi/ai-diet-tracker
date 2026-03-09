@@ -62,18 +62,14 @@ sheet = init_gsheet()
 
 @st.cache_data(ttl=60)
 def load_logs():
-
     data = sheet.get_all_records()
-
     if not data:
-        return pd.DataFrame(
-            columns=["Date","Time","Food","Calories","Protein","Carbs","Fat"]
-        )
-
+        return pd.DataFrame(columns=["Date","Time","Food","Calories","Protein","Carbs","Fat"])
+    
     df = pd.DataFrame(data)
-
+    # Ensure Date is a string for easy comparison
+    df["Date"] = df["Date"].astype(str)
     return df
-
 
 df = load_logs()
 
@@ -158,38 +154,48 @@ if submit and food_input:
 # --------------------------------------------------
 
 if not df.empty:
-
     st.divider()
 
-    # convert macros safely
+    # Get current date in IST to match your logging timezone
+    today_str = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d")
+
+    # Convert macros safely
     for col in ["Calories","Protein","Carbs","Fat"]:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
-        else:
-            df[col] = 0
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
-    calories_total = df["Calories"].sum()
-    protein_total = df["Protein"].sum()
-    carbs_total = df["Carbs"].sum()
-    fat_total = df["Fat"].sum()
+    # --- FILTER FOR TODAY ---
+    df_today = df[df["Date"] == today_str]
+    
+    calories_total = df_today["Calories"].sum()
+    protein_total = df_today["Protein"].sum()
+    carbs_total = df_today["Carbs"].sum()
+    fat_total = df_today["Fat"].sum()
 
+    st.subheader(f"📅 Today's Progress ({today_str})")
     cols = st.columns(4)
+    cols[0].metric("Calories", int(calories_total))
+    cols[1].metric("Protein", f"{int(protein_total)}g")
+    cols[2].metric("Carbs", f"{int(carbs_total)}g")
+    cols[3].metric("Fat", f"{int(fat_total)}g")
 
-    cols[0].metric("Calories Today", int(calories_total))
-    cols[1].metric("Protein Today", f"{int(protein_total)} g")
-    cols[2].metric("Carbs Today", f"{int(carbs_total)} g")
-    cols[3].metric("Fat Today", f"{int(fat_total)} g")
-
+    # --- HISTORICAL TOTALS ---
     st.divider()
+    st.subheader("🕰️ Past Daily Totals")
+    
+    # Group by Date and sum the macros
+    history_df = df.groupby("Date")[["Calories", "Protein", "Carbs", "Fat"]].sum().reset_index()
+    # Sort to show newest dates first, excluding today if you only want 'past'
+    history_df = history_df[history_df["Date"] != today_str].sort_values("Date", ascending=False)
 
-    st.subheader("📋 Meal Log")
+    if not history_df.empty:
+        st.dataframe(history_df, use_container_width=True, hide_index=True)
+    else:
+        st.info("No historical data available yet.")
 
-    st.dataframe(
-        df,
-        use_container_width=True,
-        hide_index=True
-    )
+    # --- DETAILED LOG ---
+    st.divider()
+    st.subheader("📋 Full Meal Log")
+    st.dataframe(df.sort_values(["Date", "Time"], ascending=False), use_container_width=True, hide_index=True)
 
 else:
-
     st.info("No meals logged yet.")
