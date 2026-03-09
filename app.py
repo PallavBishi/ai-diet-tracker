@@ -156,46 +156,55 @@ if submit and food_input:
 if not df.empty:
     st.divider()
 
-    # Get current date in IST to match your logging timezone
+    # Get current date in IST
     today_str = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d")
 
     # Convert macros safely
-    for col in ["Calories","Protein","Carbs","Fat"]:
+    for col in ["Calories", "Protein", "Carbs", "Fat"]:
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
-    # --- FILTER FOR TODAY ---
-    df_today = df[df["Date"] == today_str]
+    # --- 1. FILTER FOR TODAY ---
+    df_today = df[df["Date"] == today_str].copy()
     
-    calories_total = df_today["Calories"].sum()
-    protein_total = df_today["Protein"].sum()
-    carbs_total = df_today["Carbs"].sum()
-    fat_total = df_today["Fat"].sum()
+    calories_today = df_today["Calories"].sum()
+    protein_today = df_today["Protein"].sum()
+    carbs_today = df_today["Carbs"].sum()
+    fat_today = df_today["Fat"].sum()
 
+    # --- 2. TODAY'S METRICS ---
     st.subheader(f"📅 Today's Progress ({today_str})")
     cols = st.columns(4)
-    cols[0].metric("Calories", int(calories_total))
-    cols[1].metric("Protein", f"{int(protein_total)}g")
-    cols[2].metric("Carbs", f"{int(carbs_total)}g")
-    cols[3].metric("Fat", f"{int(fat_total)}g")
+    cols[0].metric("Calories", int(calories_today))
+    cols[1].metric("Protein", f"{int(protein_today)}g")
+    cols[2].metric("Carbs", f"{int(carbs_today)}g")
+    cols[3].metric("Fat", f"{int(fat_today)}g")
 
-    # --- HISTORICAL TOTALS ---
+    # --- 3. TODAY'S MEAL LOG ONLY ---
+    if not df_today.empty:
+        st.write("Items eaten today:")
+        # Only show Time, Food, and Macros for today
+        st.dataframe(
+            df_today[["Time", "Food", "Calories", "Protein", "Carbs", "Fat"]].sort_values("Time", ascending=False),
+            use_container_width=True,
+            hide_index=True
+        )
+    else:
+        st.info("No meals logged yet for today. Time to get started!")
+
+    # --- 4. HISTORICAL DAILY TOTALS ---
     st.divider()
     st.subheader("🕰️ Past Daily Totals")
     
-    # Group by Date and sum the macros
+    # Group all data by date and sum
     history_df = df.groupby("Date")[["Calories", "Protein", "Carbs", "Fat"]].sum().reset_index()
-    # Sort to show newest dates first, excluding today if you only want 'past'
-    history_df = history_df[history_df["Date"] != today_str].sort_values("Date", ascending=False)
+    
+    # Filter out today so it only shows completed/past days
+    past_days_df = history_df[history_df["Date"] != today_str].sort_values("Date", ascending=False)
 
-    if not history_df.empty:
-        st.dataframe(history_df, use_container_width=True, hide_index=True)
+    if not past_days_df.empty:
+        st.dataframe(past_days_df, use_container_width=True, hide_index=True)
     else:
-        st.info("No historical data available yet.")
-
-    # --- DETAILED LOG ---
-    st.divider()
-    st.subheader("📋 Full Meal Log")
-    st.dataframe(df.sort_values(["Date", "Time"], ascending=False), use_container_width=True, hide_index=True)
+        st.caption("Historical totals will appear here tomorrow.")
 
 else:
-    st.info("No meals logged yet.")
+    st.info("No data found in your sheet.")
